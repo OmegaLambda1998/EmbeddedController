@@ -1,3 +1,11 @@
+Fork of https://github.com/FrameworkComputer/EmbeddedController containing quality of life changes for my own personal system
+
+# Changes from Upstream:
+
+
+
+# Original Readme
+
 # Framework Laptop Embedded Controller (EC)
 
 ## Introduction
