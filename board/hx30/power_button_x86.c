@@ -58,8 +58,8 @@
  */
 #define PWRBTN_DELAY_T0		(32 * MSEC)  /* 32ms (PCH requires >16ms) */
 #define PWRBTN_DELAY_T1		(4 * SECOND - PWRBTN_DELAY_T0)  /* 4 secs - t0 */
-#define PWRBTN_DELAY_T2		(1 * SECOND)	/*  20s - (T1 + 16s hold) */
-#define PWRBTN_DELAY_T3		(1 * SECOND)	/*  11s - (T1 + 6s hold) */
+#define PWRBTN_DELAY_T2		(1 * MSEC)	/*  (T1 + 16s hold) */
+#define PWRBTN_DELAY_T3		(1 * SECOND)	/*  1s + (T1 + 6s hold) */
 /*
  * Length of time to stretch initial power button press to give chipset a
  * chance to wake up (~100ms) and react to the press (~16ms).  Also used as
@@ -75,6 +75,7 @@
 #define PWRBTN_WAIT_HOLD	(200 * MSEC)
 #define PWRBTN_HOLD_COUNT	30	/* base on PWRBTN_WAIT_HOLD 1 count = 200ms */
 #define PWRBTN_FP_HOLD_COUNT	80	/* base on PWRBTN_WAIT_HOLD 1 count = 200ms */
+#define PWRBTN_MB_HOLD_COUNT	30	/* base on PWRBTN_WAIT_HOLD 1 count = 200ms */
 
 
 enum power_button_state {
@@ -444,22 +445,14 @@ static void state_machine(uint64_t tnow)
 	case PWRBTN_STATE_HELD:
 
 		if (power_button_is_pressed()) {
-			tnext_state = tnow + PWRBTN_WAIT_HOLD;
-			if (!gpio_get_level(GPIO_ON_OFF_FP_L)) {
-				if (++hold_check < PWRBTN_FP_HOLD_COUNT)
-					break;
 
-				hold_check = 0;
-				tnext_state = tnow + PWRBTN_STATE_DELAY;
-				pwrbtn_state = PWRBTN_STATE_NEED_SHUTDOWN;
-			} else if (!gpio_get_level(GPIO_ON_OFF_BTN_L)) {
-				if (++hold_check < PWRBTN_HOLD_COUNT)
-					break;
-
-				hold_check = 0;
-				tnext_state = tnow + PWRBTN_STATE_DELAY;
-				pwrbtn_state = PWRBTN_STATE_NEED_SHUTDOWN;
+			if (!chipset_in_state(CHIPSET_STATE_ANY_OFF)) {
+				CPRINTS("PB held press 4s execute force shutdown");
+				chipset_force_shutdown(CHIPSET_SHUTDOWN_G3);
 			}
+
+			tnext_state = tnow + PWRBTN_STATE_DELAY;
+			pwrbtn_state = PWRBTN_STATE_NEED_SHUTDOWN;
 		} else {
 			CPRINTS("PB held press over 4s execute force shutdown");
 			chipset_force_shutdown(CHIPSET_SHUTDOWN_G3);
@@ -499,13 +492,24 @@ static void state_machine(uint64_t tnow)
 
 		if (power_button_is_pressed()) {
 			if (!gpio_get_level(GPIO_ON_OFF_FP_L)) {
+				tnext_state = tnow + PWRBTN_WAIT_HOLD;
+				if (++hold_check < PWRBTN_FP_HOLD_COUNT)
+					break;
+
+				hold_check = 0;
 				tnext_state = tnow + PWRBTN_DELAY_T2;
 				pwrbtn_state = PWRBTN_STATE_NEED_RESET;
 			} else if (!gpio_get_level(GPIO_ON_OFF_BTN_L)) {
+				tnext_state = tnow + PWRBTN_WAIT_HOLD;
+				if (++hold_check < PWRBTN_MB_HOLD_COUNT)
+					break;
+
+				hold_check = 0;
 				tnext_state = tnow + PWRBTN_DELAY_T3;
 				pwrbtn_state = PWRBTN_STATE_NEED_BATT_CUTOFF;
 			}
 		} else {
+			hold_check = 0;
 			power_button_released(tnow);
 		}
 
